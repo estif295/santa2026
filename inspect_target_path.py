@@ -1,48 +1,60 @@
+
 import csv
 import json
-
-PUZZLE_ID = "scored_0001"
 
 with open("puzzles.csv", encoding="utf-8-sig") as f:
     puzzles = list(csv.DictReader(f))
 
 with open("sample_submission.csv", encoding="utf-8-sig") as f:
-    submissions = list(csv.DictReader(f))
+    submissions = {
+        row["id"]: json.loads(row["program"])
+        for row in csv.DictReader(f)
+    }
 
-puzzle = next(p for p in puzzles if p["id"] == PUZZLE_ID)
-submission = next(s for s in submissions if s["id"] == PUZZLE_ID)
-
-starting = json.loads(puzzle["starting_values"])
+puzzle = puzzles[0]
+program = submissions[puzzle["id"]]
 targets = set(json.loads(puzzle["targets"]))
-program = json.loads(submission["program"])
 
-registers = [None] * 48
+registers = json.loads(puzzle["starting_values"])
+seen = set(registers)
+last_target_step = 0
+found = set()
 
-for i, value in enumerate(starting):
-    registers[i] = value
+print("PUZZLE:", puzzle["id"])
+print("STARTING:", registers)
+print("TARGET COUNT:", len(targets))
+print("\nTARGET GENERATION DETAILS")
+print("-" * 65)
 
-print("FIRST 80 INSTRUCTIONS")
-print("=" * 90)
-
-for step, (op, a, b, d) in enumerate(program, 1):
-    x = registers[a]
-    y = registers[b]
+for step, (op, i, j, d) in enumerate(program, 1):
+    a, b = registers[i], registers[j]
 
     if op == "+":
-        result = x + y
+        result = a + b
     elif op == "-":
-        result = x - y
+        result = a - b
     elif op == "*":
-        result = x * y
+        result = a * b
     elif op == "/":
-        result = x // y
+        result = a // b
+    else:
+        raise ValueError("Unknown operation: " + str(op))
 
     registers[d] = result
+    seen.add(result)
 
-    if step <= 80:
-        target_mark = "  TARGET!" if result in targets else ""
+    if result in targets and result not in found:
+        found.add(result)
+        cost = step - last_target_step
         print(
-            f"{step:4} | {op} | R{a}={x} | R{b}={y} "
-            f"| R{d}={result} | R4={registers[4]} "
-            f"| R5={registers[5]}{target_mark}"
+            f"Target {len(found):02d}: "
+            f"{result} | Step: {step} | "
+            f"Instructions since previous target: {cost}"
         )
+        last_target_step = step
+
+print("\nVALIDATION")
+print("Total instructions:", len(program))
+print("Targets reached:", len(found))
+print("Targets missing:", len(targets - found))
+print("All targets reached:", targets.issubset(found))
