@@ -11,23 +11,32 @@ with open("sample_submission.csv", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f)
     }
 
-puzzle = puzzles[0]
-program = submissions[puzzle["id"]]
-targets = set(json.loads(puzzle["targets"]))
+puzzle = next(p for p in puzzles if p["id"] == "scored_0001")
 
-registers = json.loads(puzzle["starting_values"])
-seen = set(registers)
-last_target_step = 0
-found = set()
+registers = [None] * 48
+
+starting = json.loads(puzzle["starting_values"])
+targets = set(json.loads(puzzle["targets"]))
+limit = int(puzzle["value_limit"])
+
+for i, value in enumerate(starting):
+    registers[i] = value
+
+program = submissions["scored_0001"]
+covered = set(starting)
 
 print("PUZZLE:", puzzle["id"])
-print("STARTING:", registers)
+print("STARTING:", starting)
 print("TARGET COUNT:", len(targets))
+print("PROGRAM LENGTH:", len(program))
+
 print("\nTARGET GENERATION DETAILS")
-print("-" * 65)
+print("-" * 70)
 
 for step, (op, i, j, d) in enumerate(program, 1):
-    a, b = registers[i], registers[j]
+
+    a = registers[i]
+    b = registers[j]
 
     if op == "+":
         result = a + b
@@ -37,24 +46,22 @@ for step, (op, i, j, d) in enumerate(program, 1):
         result = a * b
     elif op == "/":
         result = a // b
-    else:
-        raise ValueError("Unknown operation: " + str(op))
+        assert a % b == 0
+
+    assert 0 < result <= limit
 
     registers[d] = result
-    seen.add(result)
 
-    if result in targets and result not in found:
-        found.add(result)
-        cost = step - last_target_step
+    if result in targets and result not in covered:
+        covered.add(result)
         print(
-            f"Target {len(found):02d}: "
-            f"{result} | Step: {step} | "
-            f"Instructions since previous target: {cost}"
+            "Step:", step,
+            "| Target:", result,
+            "| Operation:", op,
+            "| Registers:", i, j, d
         )
-        last_target_step = step
 
-print("\nVALIDATION")
-print("Total instructions:", len(program))
-print("Targets reached:", len(found))
-print("Targets missing:", len(targets - found))
-print("All targets reached:", targets.issubset(found))
+print("\nFINAL RESULTS")
+print("Targets covered:", len(covered.intersection(targets)))
+print("Targets missing:", len(targets - covered))
+print("Missing values:", sorted(targets - covered))

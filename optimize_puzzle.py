@@ -1,6 +1,7 @@
 
 import csv
 import json
+from collections import Counter
 
 with open("puzzles.csv", encoding="utf-8-sig") as f:
     puzzles = list(csv.DictReader(f))
@@ -12,59 +13,84 @@ with open("sample_submission.csv", encoding="utf-8-sig") as f:
     }
 
 
-def optimize(puzzle):
+def analyze(puzzle_id):
+    puzzle = next(
+        p for p in puzzles if p["id"] == puzzle_id
+    )
+
     starting = json.loads(puzzle["starting_values"])
-    targets = json.loads(puzzle["targets"])
+    targets = set(json.loads(puzzle["targets"]))
+    program = baseline[puzzle_id]
     limit = int(puzzle["value_limit"])
 
-    values = list(starting)
-    instructions = []
-    known = {v: i for i, v in enumerate(values)}
+    registers = [None] * 48
 
-    # Try to reuse values already generated.
-    for target in targets:
-        if target in known:
-            continue
+    for i, value in enumerate(starting):
+        registers[i] = value
 
-        # Search pairs of existing values.
-        found = False
+    reached = set(starting)
+    first_reached = {}
 
-        for i, a in enumerate(values):
-            for j, b in enumerate(values):
-                candidates = [
-                    ("+", a + b),
-                    ("*", a * b),
-                    ("-", a - b),
-                ]
+    operations = Counter()
 
-                if b != 0 and a % b == 0:
-                    candidates.append(("/", a // b))
+    for step, instruction in enumerate(program, 1):
+        op, i, j, d = instruction
 
-                for op, result in candidates:
-                    if result == target and result <= limit:
-                        dest = len(values)
+        a = registers[i]
+        b = registers[j]
 
-                        if dest >= 48:
-                            break
+        if a is None or b is None:
+            raise ValueError(f"Undefined register at step {step}")
 
-                        instructions.append([op, i, j, dest])
-                        values.append(result)
-                        known[result] = dest
-                        found = True
-                        break
+        if op == "+":
+            result = a + b
+        elif op == "-":
+            result = a - b
+        elif op == "*":
+            result = a * b
+        elif op == "/":
+            if b == 0 or a % b:
+                raise ValueError(f"Invalid division at {step}")
+            result = a // b
+        else:
+            raise ValueError(f"Unknown operator: {op}")
 
-                if found:
-                    break
-            if found:
-                break
+        if result <= 0 or result > limit:
+            raise ValueError(f"Invalid result at step {step}")
 
-    return instructions, len(targets) - len(known)
+        registers[d] = result
+        reached.add(result)
+        operations[op] += 1
+
+        if result in targets and result not in first_reached:
+            first_reached[result] = step
+
+    missing = targets - reached
+
+    print("\nPUZZLE:", puzzle_id)
+    print("Baseline instructions:", len(program))
+    print("Targets:", len(targets))
+    print("Reached:", len(targets) - len(missing))
+    print("Missing:", len(missing))
+    print("Operations:", dict(operations))
+
+    print("\nTARGET GENERATION COSTS")
+
+    previous = 0
+
+    for target in sorted(targets):
+        step = first_reached.get(target)
+
+        if step is not None:
+            print(
+                target,
+                "step:", step,
+                "cost since previous:", step - previous
+            )
+            previous = step
+
+    print("\nUNIQUE VALUES:", len(reached))
+    print("VALIDATION:", "PASSED" if not missing else "FAILED")
 
 
-puzzle = puzzles[0]
-instructions, missing = optimize(puzzle)
-
-print("PUZZLE:", puzzle["id"])
-print("BASELINE:", len(baseline[puzzle["id"]]))
-print("OPTIMIZED:", len(instructions))
-print("MISSING TARGETS:", missing)
+analyze("scored_0001")
